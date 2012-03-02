@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Three.js Test</title>
+	<script type="text/javascript" src="../2d/utilities.js"></script>
+	<script type="text/javascript" src="hshg3d.js"></script>
+	<script type="text/javascript" src="Three.js"></script>
+
+	<style type="text/css">
+		.wrapper { display: inline-block; }
+	</style>
+
+</head>
+<body>
+
+	
+	<div style="float: left" class="glcontainer"></div>	
+
+	<div style="float: right; width: 385px">
+
+		<p>Light green boxes are colliding pairs from the Grid <br />
+			Dark red boxes are colliding pairs from brute <br />
+			Blue boxes are single boxes from a colliding pair from the Grid <br />
+			Orange boxes are a single box from a colliding pair from brute <br />
+			Ideally we want all colliding pairs to have both a green and red box around it.</p>
+
+
+		<p>Press Spacebar to step all vertices 
+			<input type="text" name="stepAmount" value="5" size="4" />
+			px, 
+			<input type="text" name="stepIterations" value="1" size="4" /> times
+		</p>
+
+	</div>
+
+	<script type="text/javascript">
+
+		var  RUN = true
+
+			,WIDTH = 800
+			,HEIGHT = 600
+			,ASPECTRATIO = WIDTH / HEIGHT
+			,FOV = 45
+			,NEAR = 0.1
+			,FAR = 10000
+
+			,vlist = util.makeXVertices(20, 10, WIDTH, HEIGHT, '#ccc', true)
+			,vlist2 = util.makeXVertices(10, 70, WIDTH, HEIGHT, '#ccc', true)
+			,vlist3 = util.makeXVertices(10, 30, WIDTH, HEIGHT, '#ccc', true)
+
+			//,drawCache = new util.DrawCache()
+
+			,grid = new HSHG()
+			,gridPairs
+			,brutePairs
+
+			,start
+			,gridEnd
+			,bruteEnd
+
+			,origin = new THREE.Vector3(0,0,0)
+			,renderer = new THREE.WebGLRenderer()
+			,camera = new THREE.PerspectiveCamera(FOV, ASPECTRATIO, NEAR, FAR)
+			,controls
+			,scene = new THREE.Scene()			
+			,light = new THREE.DirectionalLight(0xFFFFFF)
+			,clock = new THREE.Clock();
+		    
+	    // Move the camera to (0, 0, 600)
+	    camera.position.set(-725, 370, 333);
+	    // Point the camera towards the origin
+	    camera.lookAt(origin);
+	    // Add the camera to the scene
+	    scene.add(camera);
+
+		light.position.set(0,0,1);
+	    scene.add(light);
+
+	    renderer.setSize(WIDTH, HEIGHT);
+	    document.querySelectorAll('.glcontainer')[0].appendChild(renderer.domElement);
+	    
+	    controls = new THREE.FirstPersonControls( camera, renderer.domElement )
+		controls.movementSpeed = 500;
+		controls.lookSpeed = 0.0625;
+		controls.lookVertical = true;
+		controls.constrainVertical = false;
+		//controls.verticalMin = 1.1;
+		//controls.verticalMax = 2.2; 
+
+		vlist = vlist.concat(vlist2).concat(vlist3);
+
+		util.addListToGrid(vlist, grid);
+
+		animate();
+	
+
+		function step(){
+
+			scene.children.forEach(function(c){
+				if(c.constructor !== THREE.PerspectiveCamera)
+					scene.remove(c);
+			})
+
+			util.moveAllVertices(
+				vlist, window.innerWidth, window.innerHeight, 
+				null, 
+				document.querySelectorAll('[name=stepAmount]')[0].value,
+				true);
+
+			start = +new Date;
+			grid.update();
+			gridPairs = grid.queryForCollisionPairs();
+			gridEnd = +new Date - start;
+
+			start = +new Date;
+			brutePairs = util.bruteForceCollide(vlist);
+			bruteEnd = +new Date - start;
+
+			// just remake entire scene?
+			util.meshFromVertexList(vlist, scene, [0,0,0], 0);
+			util.meshFromVertexPairs(brutePairs, scene, [0.686, 0.762, 0.937], 5, true);
+			util.meshFromVertexPairs(gridPairs, scene, [0, 0.762, 0.937], 2, true);
+
+			renderer.render(scene, camera); 
+
+			return {
+				'brute pairs': brutePairs.length, 
+				'brute time (ms)': bruteEnd, 
+				'grid pairs': gridPairs.length, 
+				'grid time (ms)': gridEnd, 
+				'same pair count': brutePairs.length === gridPairs.length
+			}
+		}
+
+		function onKeyUp(e){
+
+			if(e.keyCode == 27){
+				RUN = false;
+				console.log('halted');
+			}
+
+			if(e.keyCode == 32){
+				var  out = [] 
+					,count = document.querySelectorAll('[name=stepIterations]')[0].value
+					,i;
+				
+				// poor-man's scheduling...
+
+				console.log(camera);
+
+				for(i = 0; i < count; i++){
+					setTimeout(function(){
+						out.push( step() );
+					}, 1);
+				}
+				
+				setTimeout(function(){
+
+					var summary = out.reduce(function(prev, curr, index, arr){
+						
+						prev.totalGrid += curr['grid time (ms)'];
+						prev.totalBrute += curr['brute time (ms)'];
+						prev.avgBrute = prev.totalBrute / arr.length;
+						prev.avgGrid = prev.totalGrid / arr.length;
+
+						return prev;
+
+					}, { totalBrute: 0, totalGrid: 0, avgBrute: 0, avgGrid: 0 });
+
+					if(console.table){
+						console.groupCollapsed('Step Data');
+						console.table(out);
+						console.groupEnd();
+						console.table([summary]);
+					} else {
+						console.log(out);
+						console.log(summary);
+					}
+						
+
+				}, 1);
+			}
+		}
+
+		function animate() {
+
+			if(RUN === true){
+				requestAnimationFrame( animate );
+				render();	
+			}
+			
+		}
+
+		function render() {
+			controls.update( clock.getDelta() );
+			renderer.render( scene, camera );
+		} 
+
+		document.addEventListener('keyup', onKeyUp, false);
+
+		onKeyUp({ keyCode: 32 });
+	</script>
+
+</body>
+</html>

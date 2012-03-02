@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Visual Test</title>
+	<script type="text/javascript" src="hshg3d.js"></script>
+	<script type="text/javascript" src="../2d/utilities.js"></script>
+
+	<style type="text/css">
+		.wrapper { display: inline-block; }
+	</style>
+
+</head>
+<body>
+
+	<div class="wrapper">
+		<h3>World</h3>
+		<canvas id="worldCvs" width="400" height="300"></canvas>
+	</div>
+
+	<div class="wrapper">
+		<h3>Grid Pairs Red, Brute Pairs Blue</h3>
+		<canvas id="gridCvs" width="400" height="300"></canvas>
+	</div>
+	
+	<div class="wrapper">
+		<h3>World, DOM Inspection</h3>
+		<div id="worldDom" style="width: 400px; height: 300px; display: inline-block;"></div>
+	</div>
+
+	<p>Press Spacebar to step all vertices 
+		<input type="text" name="stepAmount" value="5" />
+		px, 
+		<input type="text" name="stepIterations" value="1" /> times
+	</p>
+
+	<script type="text/javascript">
+		var  worldCvs = document.querySelectorAll('#worldCvs')[0]
+			,gridCvs = document.querySelectorAll('#gridCvs')[0]
+			,worldDom = document.querySelectorAll('#worldDom')[0]
+
+			,worldCtx = worldCvs.getContext('2d')
+			,gridCtx = gridCvs.getContext('2d')
+			,vlist = util.makeXVertices(100, 2, worldCvs.width, worldCvs.height, '#ccc')
+			,vlist2 = util.makeXVertices(30, 7, worldCvs.width, worldCvs.height, '#ccc')
+			,vlist3 = util.makeXVertices(70, 15, worldCvs.width, worldCvs.height, '#ccc')
+
+			//,drawCache = new util.DrawCache()
+
+			,grid = new HSHG()
+			,gridPairs
+			,brutePairs
+
+			,start
+			,gridEnd
+			,bruteEnd;
+
+		vlist = vlist.concat(vlist2).concat(vlist3);
+
+		//worldCtx.fillStyle = '#000000';
+		//gridCtx.fillStyle = '#000000';
+
+		//worldCtx.fillRect(0,0, worldCvs.width, worldCvs.height);
+		//gridCtx.fillRect(0,0, gridCvs.width, gridCvs.height);
+
+		//util.drawVertexList(vlist, worldCtx);
+		//util.domFromVertices(vlist, worldDom, worldDom.style.width, worldDom.style.height);
+
+		util.addListToGrid(vlist, grid);
+
+		function step(){
+
+			util.moveAllVertices(
+				vlist, worldCvs.width, worldCvs.height, 
+				worldDom, 
+				document.querySelectorAll('[name=stepAmount]')[0].value);
+
+			worldCtx.fillStyle = '#000000';
+			gridCtx.fillStyle = '#000000';
+
+			worldCtx.fillRect(0,0, worldCvs.width, worldCvs.height);
+			gridCtx.fillRect(0,0, gridCvs.width, gridCvs.height);
+
+			util.drawVertexList(vlist, worldCtx);
+
+			start = +new Date;
+			grid.update();
+			gridPairs = grid.queryForCollisionPairs();
+			gridEnd = +new Date - start;
+
+			start = +new Date;
+			brutePairs = util.bruteForceCollide(vlist);
+			bruteEnd = +new Date - start;
+
+			util.highlightPairs(brutePairs, gridCtx, false, 'rgba(0, 100, 255, 1)', 2);
+			util.highlightPairs(gridPairs, gridCtx, false, 'rgba(255, 20, 0, 0.8)', 1);
+
+			return {
+				'brute pairs': brutePairs.length, 
+				'brute time (ms)': bruteEnd, 
+				'grid pairs': gridPairs.length, 
+				'grid time (ms)': gridEnd, 
+				'same pair count': brutePairs.length === gridPairs.length
+			}
+		}
+
+		function onKeyUp(e){
+			if(e.keyCode == 32){
+				var  out = [] 
+					,count = document.querySelectorAll('[name=stepIterations]')[0].value
+					,i;
+				
+				// poor-man's scheduling...
+
+				for(i = 0; i < count; i++){
+					setTimeout(function(){
+						out.push( step() );
+					}, 1);
+				}
+				
+				setTimeout(function(){
+
+					var summary = out.reduce(function(prev, curr, index, arr){
+						
+						prev.totalGrid += curr['grid time (ms)'];
+						prev.totalBrute += curr['brute time (ms)'];
+						prev.avgBrute = prev.totalBrute / arr.length;
+						prev.avgGrid = prev.totalGrid / arr.length;
+
+						return prev;
+
+					}, { totalBrute: 0, totalGrid: 0, avgBrute: 0, avgGrid: 0 });
+
+					if(console.table && console.group){
+						console.groupCollapsed('Step Data');
+						console.table(out);
+						console.groupEnd();
+						console.table([summary]);
+					} else {
+						console.log(out);
+						console.log(summary);
+					}
+						
+
+				}, 1);
+			}
+		}
+
+		document.addEventListener('keyup', onKeyUp, false);
+
+		onKeyUp({ keyCode: 32 });
+	</script>
+
+</body>
+</html>
